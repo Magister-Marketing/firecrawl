@@ -407,8 +407,8 @@ const engineOptions: {
     features: {
       actions: false,
       waitFor: true,
-      screenshot: false,
-      "screenshot@fullScreen": false,
+      screenshot: true, // Magister fork: taken by the Playwright service
+      "screenshot@fullScreen": true,
       pdf: false,
       document: false,
       image: false,
@@ -420,7 +420,7 @@ const engineOptions: {
       skipTlsVerification: true,
       useFastMode: false,
       stealthProxy: false,
-      branding: false,
+      branding: true, // Magister fork: the brand-kit script runs in Playwright
       disableAdblock: false,
     },
     quality: 20,

@@ -9,6 +9,8 @@ import {
 } from 'playwright';
 import dotenv from 'dotenv';
 import UserAgent from 'user-agents';
+import { getBrandingScript } from './branding-script';
+import { hideConsentDialogs } from './consent-hide';
 import { getError } from './helpers/get_error';
 import { lookup } from 'dns/promises';
 import IPAddr from 'ipaddr.js';
@@ -182,6 +184,10 @@ interface UrlModel {
   headers?: { [key: string]: string };
   check_selector?: string;
   skip_tls_verification?: boolean;
+  // Magister fork: the cloud engine does these through Chrome CDP; here the
+  // same page that was just loaded takes the screenshot and runs the script.
+  screenshot?: boolean | { full_page?: boolean };
+  branding?: boolean;
 }
 
 let browser: Browser;
@@ -383,6 +389,8 @@ app.post('/scrape', async (req: Request, res: Response) => {
     headers,
     check_selector,
     skip_tls_verification = false,
+    screenshot: screenshotRequest,
+    branding: brandingRequest = false,
   }: UrlModel = req.body;
 
   console.log(`================= Scrape Request =================`);
@@ -539,12 +547,46 @@ app.post('/scrape', async (req: Request, res: Response) => {
       );
     }
 
+    // Both extras are best effort on an HTML page: a failure is reported in
+    // its own field and never fails the scrape that already succeeded.
+    let screenshot: string | undefined;
+    let screenshotError: string | undefined;
+    if ((screenshotRequest || brandingRequest) && !pageError) {
+      await hideConsentDialogs(page);
+    }
+    if (screenshotRequest && !pageError) {
+      const fullPage =
+        typeof screenshotRequest === 'object' && !!screenshotRequest.full_page;
+      try {
+        const png = await page.screenshot({ fullPage, type: 'png' });
+        screenshot = `data:image/png;base64,${png.toString('base64')}`;
+      } catch (error) {
+        screenshotError = error instanceof Error ? error.message : String(error);
+        console.warn('Screenshot failed:', screenshotError);
+      }
+    }
+
+    let branding: unknown;
+    let brandingError: string | undefined;
+    if (brandingRequest && !pageError) {
+      try {
+        branding = await page.evaluate(getBrandingScript());
+      } catch (error) {
+        brandingError = error instanceof Error ? error.message : String(error);
+        console.warn('Branding script failed:', brandingError);
+      }
+    }
+
     res.json({
       content: result.content,
       pageStatusCode: result.status,
       contentType: result.contentType,
       url: result.url,
       ...(pageError && { pageError }),
+      ...(screenshot && { screenshot }),
+      ...(screenshotError && { screenshotError }),
+      ...(branding !== undefined && { branding }),
+      ...(brandingError && { brandingError }),
     });
   } catch (error) {
     if (error instanceof InsecureConnectionError) {
