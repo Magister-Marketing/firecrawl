@@ -17,6 +17,7 @@ import { logger } from "./lib/logger";
 import { adminRouter } from "./routes/admin";
 import http from "node:http";
 import https from "node:https";
+import crypto from "crypto";
 import { v1Router } from "./routes/v1";
 import expressWs from "express-ws";
 import { ErrorResponse, RequestWithMaybeACUC } from "./controllers/v1/types";
@@ -127,6 +128,28 @@ app.get("/", (_, res) => {
 app.get("/e2e-test", (_, res) => {
   res.status(200).send("OK");
 });
+
+// Magister fork: with USE_DB_AUTHENTICATION=false every caller is the
+// "bypass" team, so a self-hosted stack on a shared private network is open
+// to any neighbour. SELF_HOSTED_API_KEY closes that: every route except the
+// root and liveness pages needs `Authorization: Bearer <key>`.
+if (config.SELF_HOSTED_API_KEY && config.USE_DB_AUTHENTICATION !== true) {
+  const expected = Buffer.from(config.SELF_HOSTED_API_KEY);
+  app.use((req, res, next) => {
+    if (req.path === "/" || req.path === "/e2e-test") return next();
+    const header = req.headers.authorization ?? "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+    const given = Buffer.from(token);
+    if (
+      given.length === expected.length &&
+      crypto.timingSafeEqual(given, expected)
+    ) {
+      return next();
+    }
+    res.status(401).json({ success: false, error: "Unauthorized" });
+  });
+  logger.info("SELF_HOSTED_API_KEY is set; every route needs the bearer key.");
+}
 
 // register router
 app.use(v0Router);
