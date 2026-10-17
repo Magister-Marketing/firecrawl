@@ -288,6 +288,33 @@ const isValidUrl = (urlString: string): boolean => {
   }
 };
 
+// Magister fork: a script-built page (Wix, Webflow, React) answers "load"
+// with an empty body and draws itself a moment later; the cloud engine waits
+// for the network to settle, the stock service read the empty body and the
+// API refused it. Without an explicit wait, give the page a bounded moment
+// for its requests to go quiet and for visible text to appear.
+const RENDER_NETWORK_IDLE_MS = 5000;
+const RENDER_TEXT_MS = 3000;
+
+const waitForRenderedText = async (page: Page): Promise<void> => {
+  try {
+    await page.waitForLoadState('networkidle', {
+      timeout: RENDER_NETWORK_IDLE_MS,
+    });
+  } catch (_) {
+    // Still busy after the budget: read what is there.
+  }
+  try {
+    await page.waitForFunction(
+      () => (document.body?.innerText || '').trim().length > 0,
+      undefined,
+      { timeout: RENDER_TEXT_MS },
+    );
+  } catch (_) {
+    // A genuinely empty page is reported as such by the API.
+  }
+};
+
 const scrapePage = async (
   page: Page,
   url: string,
@@ -315,6 +342,8 @@ const scrapePage = async (
 
   if (waitAfterLoad > 0) {
     await page.waitForTimeout(waitAfterLoad);
+  } else {
+    await waitForRenderedText(page);
   }
 
   if (checkSelector) {
