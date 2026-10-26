@@ -182,6 +182,10 @@ const configSchema = z.object({
 
   // API Keys & Authentication
   BULL_AUTH_KEY: z.string().optional(),
+  // Magister fork: a shared bearer key for a self-hosted stack that runs
+  // without database authentication, so the API is not open to everything
+  // on its network.
+  SELF_HOSTED_API_KEY: z.string().optional(),
   S2S_FIRECRAWL_INTEGRATIONS_TO_FIRECRAWL_API_KEY: emptyStringAsUndefined(
     z.string().trim().min(1),
   ),
