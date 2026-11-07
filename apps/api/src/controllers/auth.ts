@@ -167,6 +167,9 @@ const mockACUC: () => AuthCreditUsageChunk = () => ({
   is_banned: false,
   is_extract: false,
   ...DEFAULT_TEAM_LIMITS,
+  ...(config.SELF_HOSTED_CONCURRENCY_LIMIT
+    ? { concurrency_limit: config.SELF_HOSTED_CONCURRENCY_LIMIT }
+    : {}),
 });
 
 /**
